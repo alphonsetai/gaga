@@ -13,29 +13,32 @@
 
 
 <script id="tpl-upgrade-init" type="text/html">
-    <div class="upgrade_init_title textcenter">自动检测需要执行以下过程</div>
-    <div class="upgrade_process textcenter">
-        {{each versions  version index}}
-            <div class="textcenter margin-right2">
-                {{if nowLength == 0}}
-                    <div><img id="v_{{index}}" class="upgrade_img {{index}}" version="{{index}}" versionName="{{version}}" src="../../public/img/upgrade/success.png"></div>
-                {{else}}
-                <div> <img id="v_{{index}}" class="upgrade_img {{index}}" version="{{index}}" versionName="{{version}}" src="../../public/img/upgrade/todo.png"></div>
-                {{/if}}
-                <span class="text_{{index}}">{{version}}</span>
-            </div>
-            {{if nowLength < (length-1) }}
-                <div>  <img id="v_line_{{index}}" class="upgrade_line_img margin-right2" src="../../public/img/upgrade/todo_line.png"></div>
-            {{/if}}
-            <input type="hidden" value="{{nowLength = (nowLength+1)}}">
-        {{/each}}
-
-    </div>
-    <div class="upgrade_info" >
-        <div class="upgrade_info_msg" ></div>
-    </div>
-    <div class="textcenter margin-top3">
-        <button class="upgrade_staring_btn">开始升级</button>
+    <div style="width: 75rem;">
+        <div class="upgrade_init_title textcenter">自动检测需要执行以下过程</div>
+       <div style="width:100%;text-align: center;display: flex;justify-content: center;overflow-x: scroll;">
+           <div class="upgrade_process textcenter">
+               {{each versions  version index}}
+               <div class="textcenter margin-right2">
+                   {{if nowLength == 0}}
+                   <div><img id="v_{{index}}" class="upgrade_img {{index}}" version="{{index}}" versionName="{{version}}" src="../../public/img/upgrade/success.png"></div>
+                   {{else}}
+                   <div> <img id="v_{{index}}" class="upgrade_img {{index}}" version="{{index}}" versionName="{{version}}" src="../../public/img/upgrade/todo.png"></div>
+                   {{/if}}
+                   <span class="text_{{index}}">{{version}}</span>
+               </div>
+               {{if nowLength < (length-1) }}
+               <div>  <img id="v_line_{{index}}" class="upgrade_line_img margin-right2" src="../../public/img/upgrade/todo_line.png"></div>
+               {{/if}}
+               <input type="hidden" value="{{nowLength = (nowLength+1)}}">
+               {{/each}}
+           </div>
+       </div>
+        <div class="upgrade_info" >
+            <div class="upgrade_info_msg" ></div>
+        </div>
+        <div class="textcenter margin-top3">
+            <button class="upgrade_staring_btn">开始升级</button>
+        </div>
     </div>
 </script>
 
@@ -45,7 +48,7 @@
     <div class="upgrade_token_div">
         <input class="upgrade_token" type="text" placeholder="输入升级口令">
     </div>
-    <div class="upgrade_tip">升级口令保存在{{passwordFileName}}文件里，请去服务端查看</div>
+    <div class="upgrade_tip">升级口令保存在{{passwordFileName}}，请去服务端查看</div>
     <div class="textcenter">
         <button class="upgrade_next_btn">下一步</button>
     </div>

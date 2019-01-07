@@ -11,6 +11,27 @@ class Page_Passport_LoginController extends HttpBaseController
 
     public function index()
     {
+        $tag = __CLASS__ . '->' . __FUNCTION__;
+        try {
+            isset($_GET['token']) ? $this->checkUserToken($_GET['token']) : $this->checkUserCookie(); ;
+            if ($this->userId) {
+                $jumpPage = $this->getJumpUrlFromParams();
+                $apiPageIndex = ZalyConfig::getApiIndexUrl();
+                if ($jumpPage) {
+                    if (strpos($apiPageIndex, "?")) {
+                        $apiPageIndex .= "&" . $jumpPage;
+                    } else {
+                        header("Location:" . $apiPageIndex . "?" . $jumpPage);
+                        $apiPageIndex .= "?" . $jumpPage;
+                    }
+                }
+                header("Location:" . $apiPageIndex);
+                exit();
+            }
+        } catch (Exception $ex) {
+            $this->logger->error($tag, "page.passport.login error=" . $ex->getMessage());
+        }
+
         $cookieStr = isset($_SERVER['HTTP_COOKIE']) ? $_SERVER['HTTP_COOKIE'] : "";
         $isDuckchat = 0;
 
@@ -24,8 +45,8 @@ class Page_Passport_LoginController extends HttpBaseController
         $loginConfig = $this->ctx->Site_Custom->getLoginAllConfig();
 
         $loginNameAliasConfig = isset($loginConfig[LoginConfig::LOGIN_NAME_ALIAS]) ? $loginConfig[LoginConfig::LOGIN_NAME_ALIAS] : "";
-        $loginNameAlias = isset( $loginNameAliasConfig["configValue"]) ?  $loginNameAliasConfig["configValue"] : "";
-        $passwordResetWayConfig = isset($loginConfig[LoginConfig::PASSWORD_RESET_WAY]) ?  $loginConfig[LoginConfig::PASSWORD_RESET_WAY] : "";
+        $loginNameAlias = isset($loginNameAliasConfig["configValue"]) ? $loginNameAliasConfig["configValue"] : "";
+        $passwordResetWayConfig = isset($loginConfig[LoginConfig::PASSWORD_RESET_WAY]) ? $loginConfig[LoginConfig::PASSWORD_RESET_WAY] : "";
         $passwordRestWay = isset($passwordResetWayConfig["configValue"]) ? $passwordResetWayConfig["configValue"] : "";
 
         $loginConfig = $this->ctx->Site_Custom->getLoginAllConfig();
@@ -45,22 +66,33 @@ class Page_Passport_LoginController extends HttpBaseController
         $loginBackgroundImageDisplay = isset($loginBackgroundImageDisplayConfig["configValue"]) ? $loginBackgroundImageDisplayConfig["configValue"] : "";
 
         $siteVersionName = ZalyConfig::getConfig(ZalyConfig::$configSiteVersionNameKey);
+        $thirdPartyLoginOptions = ZalyLogin::getThirdPartyConfigWithoutVerifyUrl();
+
+        $enableInvitationCode = $this->getSiteConfigFromDB(SiteConfig::SITE_ENABLE_INVITATION_CODE);
+        $enableRealName = $this->getSiteConfigFromDB(SiteConfig::SITE_ENABLE_REAL_NAME);
+
+        $title = ZalyText::getText("text.login", $this->language)."-".$siteName;
 
         $params = [
-            'siteName' => $siteName,
-            'siteLogo' => $this->ctx->File_Manager->getCustomPathByFileId($siteLogo),
-            'siteVersionName' => $siteVersionName,
+            'title' => $title,
+            'siteLogo'   => $this->ctx->File_Manager->getCustomPathByFileId($siteLogo),
             'isDuckchat' => $isDuckchat,
-            'loginNameAlias' => $loginNameAlias,
-            'passwordFindWay' => $passwordRestWay,
-            'passwordResetWay' => $passwordRestWay,
-            'passwordResetRequired' => $passwordResetRequired,
+            'siteVersionName'  => $siteVersionName,
             'loginWelcomeText' => $loginWelcomeText,
             'loginBackgroundColor' => $loginBackgroundColor,
             'loginBackgroundImage' => $this->ctx->File_Manager->getCustomPathByFileId($loginBackgroundImage),
-            'loginBackgroundImageDisplay' => $loginBackgroundImageDisplay,
-        ];
 
+            'loginBackgroundImageDisplay' => $loginBackgroundImageDisplay,
+
+            'loginNameAlias'   => $loginNameAlias,
+            'passwordFindWay'  => $passwordRestWay,
+            'passwordResetWay' => $passwordRestWay,
+            'passwordResetRequired'  => $passwordResetRequired,
+            'thirdPartyLoginOptions' => $thirdPartyLoginOptions,
+
+            'enableInvitationCode' => $enableInvitationCode,
+            'enableRealName'       => $enableRealName,
+        ];
         echo $this->display("passport_login", $params);
         return;
     }

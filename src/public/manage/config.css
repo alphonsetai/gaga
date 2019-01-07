@@ -50,6 +50,7 @@ html, body {
     flex-direction: row;
     text-align: center;
     height: 44px;
+    cursor: pointer;
 }
 
 /*.item-row:hover{*/
@@ -139,6 +140,8 @@ html, body {
     /*vertical-align: middle;*/
     justify-content: center; /*x轴对齐方式*/
     align-items: center; /*y轴对滴方式*/
+    max-width: 70%;
+    overflow: hidden;
 }
 
 .item-body-desc {
@@ -260,6 +263,8 @@ html, body {
     border-radius: 7px;
     font-size: 16px;
     color: rgba(255, 255, 255, 1);
+    outline: none;
+    cursor: pointer;
 }
 
 .weui_switch {
@@ -334,4 +339,8 @@ html, body {
 
 .main-color {
     color: #4C3BB1;
+}
+.font-size-12 {
+    font-size: 12px;
+    overflow: hidden;
 }

@@ -33,72 +33,78 @@ class Im_Cts_MessageController extends Im_BaseController
      */
     public function doRequest(\Google\Protobuf\Internal\Message $request, Zaly\Proto\Core\TransportData $transportData)
     {
-        $message = $request->getMessage();
 
+        $message = $request->getMessage();
         $msgId = $message->getMsgId();
         $fromUserId = $this->userId;
         $msgType = $message->getType();
         $msgRoomType = $message->getRoomType();
-
         $result = false;
 
-        if (Zaly\Proto\Core\MessageRoomType::MessageRoomGroup == $msgRoomType) {
-            $this->isGroupRoom = true;
-            $this->toId = $message->getToGroupId();
+        try {
+            if (Zaly\Proto\Core\MessageRoomType::MessageRoomGroup == $msgRoomType) {
+                $this->isGroupRoom = true;
+                $this->toId = $message->getToGroupId();
 
-            //if group exist isLawful
-            $groupProfile = $this->checkGroupExisted($this->toId);
-            if (empty($groupProfile)) {
-                //if group is not exist
-                $noticeText = ZalyText::getText(ZalyText::$textGroupNotExists);
-                $this->returnGroupNotLawfulMessage($msgId, $msgRoomType, $fromUserId, $this->toId, $noticeText);
-                return;
-            } else {
-                //check
-                $speakers = $groupProfile['speakers'];
+                //if group exist isLawful
+                $groupProfile = $this->checkGroupExisted($this->toId);
+                if (empty($groupProfile)) {
+                    //if group is not exist
+                    $noticeText = ZalyText::getText(ZalyText::$textGroupNotExists);
+                    $this->returnGroupNotLawfulMessage($msgId, $msgRoomType, $fromUserId, $this->toId, $noticeText);
+                    return;
+                } else {
+                    //check
+                    $speakers = $groupProfile['speakers'];
 
-                if (!empty($speakers)) {
-                    $speakers = explode(",", $speakers);
+                    if (!empty($speakers)) {
+                        $speakers = explode(",", $speakers);
 
-                    if (!$this->isGroupAdmin($this->toId) && !in_array($this->userId, $speakers)) {
-                        $noticeText = ZalyText::getText(ZalyText::$textGroupNotSpeaker);
-                        $noticeText .= $this->getSpeakersName($speakers);
-                        $this->returnGroupNotLawfulMessage($msgId, $msgRoomType, $fromUserId, $this->toId, $noticeText);
-                        return;
+                        if (!$this->isGroupAdmin($this->toId) && !in_array($this->userId, $speakers)) {
+                            $noticeText = ZalyText::getText(ZalyText::$textGroupNotSpeaker);
+                            $noticeText .= $this->getSpeakersName($speakers);
+                            $this->returnGroupNotLawfulMessage($msgId, $msgRoomType, $fromUserId, $this->toId, $noticeText);
+                            return;
+                        }
                     }
                 }
+
+                // if lawful go on
+                $isLawful = $this->checkIsGroupMember($fromUserId, $this->toId);
+                if (!$isLawful) {
+                    //if user is not group member
+                    //                $noticeText = ZalyText::getText(ZalyText::$textGroupNotMember);
+                    $noticeText = ZalyText::$keyGroupNotMember;
+                    $this->returnGroupNotLawfulMessage($msgId, $msgRoomType, $fromUserId, $this->toId, $noticeText);
+                    return;
+                }
+
+                $result = $this->ctx->Message_Client->sendGroupMessage($msgId, $fromUserId, $this->toId, $msgType, $message);
+
+            } else if (Zaly\Proto\Core\MessageRoomType::MessageRoomU2 == $msgRoomType) {
+                $this->isGroupRoom = false;
+                $this->toId = $message->getToUserId();
+
+                //check friend relation
+                $isFriend = $this->getIsFriendRelation($fromUserId, $this->toId);
+
+                if ($isFriend) {
+                    $result = $this->ctx->Message_Client->sendU2Message($msgId, $this->toId, $fromUserId, $this->toId, $msgType, $message);
+                } else {
+                    $result = false;
+                    $this->returnU2MessageIfNotFriend($msgId, $msgRoomType, $fromUserId, $this->toId);
+                    return;
+                }
+
             }
-
-            // if lawful go on
-            $isLawful = $this->checkIsGroupMember($fromUserId, $this->toId);
-            if (!$isLawful) {
-                //if user is not group member
-//                $noticeText = ZalyText::getText(ZalyText::$textGroupNotMember);
-                $noticeText = ZalyText::$keyGroupNotMember;
-                $this->returnGroupNotLawfulMessage($msgId, $msgRoomType, $fromUserId, $this->toId, $noticeText);
-                return;
-            }
-
-            $result = $this->ctx->Message_Client->sendGroupMessage($msgId, $fromUserId, $this->toId, $msgType, $message);
-
-        } else if (Zaly\Proto\Core\MessageRoomType::MessageRoomU2 == $msgRoomType) {
-            $this->isGroupRoom = false;
-            $this->toId = $message->getToUserId();
-
-            //check friend relation
-            $isFriend = $this->getIsFriendRelation($fromUserId, $this->toId);
-
-            if ($isFriend) {
-                $result = $this->ctx->Message_Client->sendU2Message($msgId, $this->toId, $fromUserId, $this->toId, $msgType, $message);
-            } else {
-                $result = false;
-                $this->returnU2MessageIfNotFriend($msgId, $msgRoomType, $fromUserId, $this->toId);
-                return;
-            }
-
+        } catch (ZalyException $ze) {
+            $result = false;
+            $this->logger->error($this->action, $ze->getMessage() . "->" . $ze->getErrInfo($this->language));
         }
 
         $this->returnMessage($msgId, $msgRoomType, $msgType, $message, $fromUserId, $this->toId, $result);
+
+        return;
     }
 
     private function returnMessage($msgId, $msgRoomType, $msgType, $message, $fromUserId, $toUserId, $result)
@@ -140,11 +146,10 @@ class Im_Cts_MessageController extends Im_BaseController
         }
 
         $code = '<! DOCTYPE html ><html ><head ><meta charset = "UTF-8" ><meta charset = "UTF-8" ><meta name = "viewport" content = "width=device-width, initial-scale=1, maximum-scale=1" ></head ><body style = "background: #DFDFDF;margin:5px 0 0 0;padding:0" ><div style = "text-align: center;font-size: 14px" > <font color =#FFFFFF>' . $text . '</font><font color=#4C3BB1>好友申请</font></div></body></html>';
-        $hrefUrl = 'duckchat://0.0.0.0/goto?page=applyFriend&x=u-' . $toUserId;
+        $hrefUrl = 'duckchat://0.0.0.0/goto?page=addFriend&x=u-' . $toUserId;
 
         //代发一个web消息给from
-        $this->ctx->Message_Client->proxyU2WebNoticeMessage($fromUserId, $toUserId, $fromUserId, $title, $code, $hrefUrl, $height);
-        $this->ctx->Message_News->tellClientNews(false, $fromUserId);
+        $this->ctx->Message_Client->proxyU2WebNoticeMessage($fromUserId, $toUserId, $fromUserId, $title, $code, $hrefUrl, $height, true);
     }
 
     //return if group is not lawful
@@ -155,9 +160,8 @@ class Im_Cts_MessageController extends Im_BaseController
         $this->finish_request();
 
         //proxy group message to u2
-        $this->ctx->Message_Client->proxyGroupAsU2NoticeMessage($fromUserId, $fromUserId, $groupId, $noticeText);
-        //send im.stc.news to client
-        $this->ctx->Message_News->tellClientNews(false, $fromUserId);
+        $this->ctx->Message_Client->proxyGroupAsU2NoticeMessage($fromUserId, $fromUserId, $groupId, $noticeText, true);
+
     }
 
 

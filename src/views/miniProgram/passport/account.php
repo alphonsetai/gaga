@@ -10,10 +10,16 @@
     <script type="text/javascript" src="../../../public/js/jquery.min.js"></script>
     <script src="../../../public/js/jquery.i18n.properties.min.js"></script>
     <script src="../../../public/js/template-web.js"></script>
-    <script src="../../../public/js/zalyjsNative.js"></script>
+    <script src="../../../public/sdk/zalyjsNative.js"></script>
+    <script src="../../../public/js/zalyjsHelper.js"></script>
 
 </head>
 <body>
+
+
+<input type="hidden" value="<?php echo $passwordContainCharacters;?>" class="passwordContainCharacters">
+<input type="hidden" value="<?php echo $passwordMaxLength;?>" class="pwdMaxLength">
+<input type="hidden" value="<?php echo $passwordMinLength;?>" class="pwdMinLength">
 
 <div class="zaly_container" >
     <div class="zaly_login zaly_site_register zaly_site_register-repwd" >
@@ -23,35 +29,35 @@
             </div>
 
             <div class="login_name_div login_name_div_mobile">
-                <image src="../../public/img/login/loginName.png" class="img"/>
-                <input type="text" class="input_login_site forget_input_loginName" datatype="s" autocapitalize="off"  data-local-placeholder="loginNamePlaceholder" placeholder="输入登录名">
+                <img src="../../public/img/login/loginName.png" class="img"/>
+                <input type="text" class="input_login_site forget_input_loginName" datatype="s" autocapitalize="off"  data-local-placeholder="loginNamePlaceholder" placeholder="输入用户名">
                 <img src="../../../public/img/msg/msg_failed.png" class="img-failed forget_input_loginName_failed">
                 <div class="line"></div>
             </div>
 
 
             <div class="login_name_div forget_input_pwd_div margin-top2"  >
-                <image src="../../public/img/login/pwd.png" class="img"/>
+                <img src="../../public/img/login/pwd.png" class="img"/>
                 <input type="password" class="input_login_site forget_input_oldPwd" autocapitalize="off"  data-local-placeholder="enterOldPasswordPlaceholder"  placeholder="输入旧密码" >
-                <div class="pwd_div" onclick="changeImgByClickOldPwd()"><image src="../../public/img/login/hide_pwd.png" class="oldPwd" img_type="hide"/></div>
+                <div class="pwd_div" onclick="changeImgByClickOldPwd()"><img src="../../public/img/login/hide_pwd.png" class="oldPwd" img_type="hide"/></div>
                 <img src="../../../public/img/msg/msg_failed.png" class="img-failed forget_input_oldPwd_failed">
-
                 <div class="line"></div>
             </div>
 
             <div class="login_name_div forget_input_pwd_div margin-top2"  >
-                <image src="../../public/img/login/pwd.png" class="img"/>
-                <input type="password" class="input_login_site forget_input_pwd"  autocapitalize="off"  data-local-placeholder="enterPasswordPlaceholder"  placeholder="输入密码,长度5到20个字符" >
-                <div class="pwd_div" onclick="changeImgByClickPwd()"><image src="../../public/img/login/hide_pwd.png" class="pwd" img_type="hide"/></div>
+                <img src="../../public/img/login/pwd.png" class="img"/>
+                <input type="password" class="input_login_site forget_input_pwd"  autocapitalize="off"  data-local-placeholder="enterPasswordPlaceholder"  placeholder="输入密码" >
+                <div class="pwd_div" onclick="changeImgByClickPwd()"><img src="../../public/img/login/hide_pwd.png" class="pwd" img_type="hide"/></div>
                 <img src="../../../public/img/msg/msg_failed.png" class="img-failed forget_input_pwd_failed">
-
                 <div class="line"></div>
             </div>
+            <div style="font-size:1.31rem;font-family:PingFangSC-Regular;font-weight:400;color:rgba(153,153,153,1);" class="passwordTips"></div>
+
 
             <div class="login_name_div forget_input_repwd_div margin-top2" >
-                <image src="../../public/img/login/re_pwd.png" class="img"/>
+                <img src="../../public/img/login/re_pwd.png" class="img"/>
                 <input type="password" class="input_login_site forget_input_repwd" autocapitalize="off"   data-local-placeholder="enterRepasswordPlaceholder"  placeholder="再次输入密码"  >
-                <div class="repwd_div" onclick="changeImgByClickRepwd()"><image src="../../public/img/login/hide_pwd.png" class="repwd" img_type="hide"/></div>
+                <div class="repwd_div" onclick="changeImgByClickRepwd()"><img src="../../public/img/login/hide_pwd.png" class="repwd" img_type="hide"/></div>
                 <img src="../../../public/img/msg/msg_failed.png" class="img-failed forget_input_repwd_failed">
 
                 <div class="line" ></div>
@@ -102,6 +108,32 @@
 
     $(":input").attr("autocapitalize", "off");
 
+    var pwdContainCharacters = $(".passwordContainCharacters").val();
+    var pwdMaxLength = $(".pwdMaxLength").val();
+    var pwdMinLength = $(".pwdMinLength").val();
+
+   function displayPasswordTip()
+   {
+       if(languageNum == UserClientLangZH) {
+            if(pwdContainCharacters) {
+                var pwdTip = pwdContainCharacters+", 长度 "+pwdMinLength+"-"+pwdMaxLength;
+            } else {
+                var pwdTip = "长度 "+pwdMinLength+"-"+pwdMaxLength;
+            }
+           pwdTip = pwdTip.replace("letter", "字母");
+           pwdTip = pwdTip.replace("number", "数字");
+           pwdTip = pwdTip.replace("special_characters", "特殊字符");
+       } else {
+           if(pwdContainCharacters) {
+               var pwdTip = pwdContainCharacters+", length "+pwdMinLength+"-"+pwdMaxLength;
+           } else {
+               var pwdTip = "length"+pwdMinLength+"-"+pwdMaxLength;
+           }
+       }
+       $(".passwordTips").html(pwdTip);
+   }
+
+    displayPasswordTip();
 
     function changeImgByClickPwd() {
         var imgType = $(".pwd").attr("img_type");
@@ -149,35 +181,6 @@
         }
     }
 
-
-    function handleHtmlLanguage(html)
-    {
-        $(html).find("[data-local-placeholder]").each(function () {
-            var placeholderValue = $(this).attr("data-local-placeholder");
-            var placeholder = $(this).attr("placeholder");
-            var newPlaceholder = $.i18n.map[placeholderValue];
-            html = html.replace(placeholder, newPlaceholder);
-        });
-
-        $(html).find("[data-local-value]").each(function () {
-            var changeHtmlValue = $(this).attr("data-local-value");
-            var valueHtml = $(this).html();
-            var newValueHtml = $.i18n.map[changeHtmlValue];
-            // $(this).html(newValueHtml);
-            html = html.replace(valueHtml, newValueHtml);
-        });
-
-        return html;
-    }
-    /**
-     * 数字 字母下划线
-     * @param password
-     */
-    function isPassword(password) {
-        var reg = /^[^\u4e00-\u9fa5]+$/;
-        return reg.test(password);
-    }
-
     $(document).on("click", ".reset_pwd_button", function () {
         var isFoucs = false;
         var action = "api.passport.passwordResetPassword";
@@ -202,7 +205,7 @@
             }
         }
 
-        if(newPassword ==  "" || newPassword.length<5 || newPassword.length>20 || !isPassword(newPassword)) {
+        if(newPassword ==  "" || newPassword.length<pwdMinLength || newPassword.length>pwdMaxLength || !verifyChars(pwdContainCharacters, newPassword)) {
             $(".forget_input_pwd_failed")[0].style.display = "block";
             if(isFocus == false) {
                 $(".forget_input_pwd").focus();
@@ -232,7 +235,7 @@
         $(".forget_input_repwd_failed")[0].style.display = "none";
 
         if(repassword != newPassword) {
-            zalyjsAlert($.i18n.map['passwordIsNotSameJsTip']);
+            alert($.i18n.map['passwordIsNotSameJsTip']);
             return;
         }
 
@@ -252,16 +255,20 @@
             url:"./index.php?action=miniProgram.passport.account&lang="+languageNum,
             data: {"loginName" : loginName},
             success:function (resp, status, request) {
-                var error = JSON.parse(resp);
-                if(error["errCode"].length>1 && error["errCode"] != "success") {
-                    zalyjsAlert(error['errCode']);
-                    return;
-                }
-                try{
-                    zalyjsNavClosePlugin();
-                }catch (error) {
+               try{
+                   var error = JSON.parse(resp);
+                   if(error["errCode"].length>1 && error["errCode"] != "success") {
+                       alert(error['errCode']);
+                       return;
+                   }
+                   try{
+                       zalyjsClosePage();
+                   }catch (error) {
 
-                }
+                   }
+               }catch (error) {
+                   zalyjsClosePage();
+               }
             },
             failed:function (error) {
                 console.log(error);

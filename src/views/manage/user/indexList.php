@@ -20,7 +20,9 @@
             line-height: 20px;
             margin: 17px 0px 7px 10px;
         }
-
+        .item-row {
+            cursor: pointer;
+        }
         #search-user-div {
             text-align: center;
         }
@@ -36,7 +38,7 @@
         <img class="search-img" width="19px" height="19px" src="../../public/img/manage/search.png">
 
         <?php if ($lang == "1") { ?>
-            <input class="search-input" placeholder="通过登录名、昵称、用户ID 搜索用户">
+            <input class="search-input" placeholder="通过用户名、昵称、用户ID 搜索用户">
         <?php } else { ?>
             <input class="search-input" placeholder="search loginName,nickname,userId">
         <?php } ?>
@@ -77,40 +79,41 @@
                 </div>
             </div>
 
-            <?php foreach ($userList as $key => $profile) { ?>
+            <div class="item-row-list">
+                <?php foreach ($userList as $key => $profile) { ?>
 
-                <div class="item-row">
-                    <div class="item-body" onclick="showUserProfile('<?php echo($profile["userId"]) ?>')"
-                         id="user-list-id" userId="<?php echo($profile["userId"]) ?>">
-                        <div class="item-body-display" style="align-items: center">
-                            <div class="item-body-desc"><?php
-                                $username = $profile["userId"];
-                                if ($profile["nickname"]) {
-                                    $username = $profile["nickname"];
-                                } else if ($profile["loginName"]) {
-                                    $username = $profile["loginName"];
-                                }
+                    <div class="item-row">
+                        <div class="item-body" onclick="showUserProfile('<?php echo($profile["userId"]) ?>')"
+                             id="user-list-id">
+                            <div class="item-body-display" style="align-items: center">
+                                <div class="item-body-desc"><?php
+                                    $username = $profile["userId"];
+                                    if ($profile["nickname"]) {
+                                        $username = $profile["nickname"];
+                                    } else if ($profile["loginName"]) {
+                                        $username = $profile["loginName"];
+                                    }
 
-                                $length = mb_strlen($username);
-                                if ($length > 16) {
-                                    echo mb_substr($username, 0, 16) . "...";
-                                } else {
-                                    echo $username;
-                                }
-                                ?></div>
+                                    $length = mb_strlen($username);
+                                    if ($length > 20) {
+                                        echo mb_substr($username, 0, 20) . "...";
+                                    } else {
+                                        echo $username;
+                                    }
+                                    ?></div>
 
-                            <div class="item-body-tail">
-                                <div class="item-body-value">
-                                    <img class="more-img" src="../../public/img/manage/more.png"/>
+                                <div class="item-body-tail">
+                                    <div class="item-body-value">
+                                        <img class="more-img" src="../../public/img/manage/more.png"/>
+                                    </div>
                                 </div>
                             </div>
+
                         </div>
-
                     </div>
-                </div>
-                <div class="division-line"></div>
-            <?php } ?>
-
+                    <div class="division-line"></div>
+                <?php } ?>
+            </div>
         </div>
 
     </div>
@@ -119,6 +122,71 @@
 
 <script type="text/javascript" src="../../public/jquery/jquery-3.3.1.min.js"></script>
 <script type="text/javascript" src="../../public/manage/native.js"></script>
+<script type="text/javascript" src="../../public/sdk/zalyjsNative.js"></script>
+
+<script type="text/javascript">
+
+    var currentPageNum = 1;
+    var loading = true;
+
+    $(window).scroll(function () {
+        //判断是否滑动到页面底部
+        if ($(window).scrollTop() === $(document).height() - $(window).height()) {
+
+            if (!loading) {
+                return;
+            }
+
+            loadMoreUsers();
+        }
+    });
+
+    function loadMoreUsers() {
+
+        var data = {
+            'pageNum': ++currentPageNum,
+        };
+
+        var url = "index.php?action=manage.user";
+        zalyjsCommonAjaxPostJson(url, data, loadMoreResponse)
+    }
+
+    function loadMoreResponse(url, data, result) {
+
+        if (result) {
+            var res = JSON.parse(result);
+
+            var isloading = res['loading'];
+            loading = isloading;
+            var data = res['data'];
+
+            // alert(result);
+            if (data && data.length > 0) {
+                $.each(data, function (index, user) {
+                    var userHtml = ' ' +
+                        '<div class="item-row">' +
+                        '<div class="item-body" onclick="showUserProfile(\'' + user.userId + '\')" id="user-list-id">' +
+                        '<div class="item-body-display" style="align-items: center">' +
+                        ' <div class="item-body-desc">' + user.nickname + '</div>' +
+                        '   <div class="item-body-tail">' +
+                        '   <div class="item-body-value">' +
+                        '   <img class="more-img" src="../../public/img/manage/more.png"/>' +
+                        '   </div>' +
+                        '   </div>' +
+                        '   </div>' +
+                        '   </div>' +
+                        '</div>';
+
+                    userHtml += '<div class="division-line"></div>';
+
+                    $(".item-row-list").append(userHtml);
+                });
+            }
+
+        }
+
+    }
+</script>
 
 <script type="text/javascript">
 
@@ -195,7 +263,7 @@
 
     function showUserProfile(userId) {
         var url = "./index.php?action=manage.user.profile&lang=" + getLanguage() + "&userId=" + userId;
-        zalyjsCommonOpenPage(url);
+        zalyjsOpenPage(url);
     }
 
 </script>

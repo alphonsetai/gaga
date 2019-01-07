@@ -33,6 +33,7 @@ var ZalyAction = {
     im_cts_sync : "site.ImCtsSyncRequest",
     im_cts_auth : "site.ImCtsAuthRequest",
     im_cts_updatePointer : "site.ImCtsUpdatePointerRequest",
+    im_cts_ping:"site.ImCtsPingRequest",
 
     api_passport_passwordReg : "site.ApiPassportPasswordRegRequest",
     api_passport_passwordLogin : "site.ApiPassportPasswordLoginRequest",
@@ -45,8 +46,14 @@ var ZalyAction = {
     api_friend_search:"site.ApiFriendSearchRequest",
     api_group_setSpeaker: "site.ApiGroupSetSpeakerRequest",
 
-    im_stc_news :"im.stc.news",
+    im_cts_auth_key:"im.cts.auth",
+    im_stc_news_key :"im.stc.news",
     im_stc_message_key :"im.stc.message",
+
+    api_plugin_list:"site.ApiPluginListRequest",
+
+    api_site_mute:"site.ApiSiteMuteRequest",
+
 
     getReqeustName : function (action) {
         var action = action.split(".").join("_");
@@ -62,7 +69,12 @@ var ZalyAction = {
                 actionUrl = actionUrl.replace("./", "/");
             }
             actionUrl = serverAddressForApi+actionUrl;
+        } else {
+            if(actionUrl.indexOf("./") != -1) {
+                actionUrl = actionUrl.replace("./", "/");
+            }
         }
+
         if(actionUrl.indexOf("?") == -1) {
             actionUrl = actionUrl + "?lang="+languageNum;
         } else {

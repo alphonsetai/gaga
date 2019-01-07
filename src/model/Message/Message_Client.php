@@ -1,10 +1,7 @@
 <?php
 /**
- *
- * cts Message && proxy Message
- *
- * Created by PhpStorm.
- * User: anguoyue
+ * Message client ,used in send message and proxy message
+ * Author: SAM<an.guoyue254@gmail.com>
  * Date: 31/07/2018
  * Time: 6:45 PM
  */
@@ -13,10 +10,12 @@ class Message_Client
 {
 
     private $ctx;
+    private $logger;
 
     public function __construct(BaseCtx $ctx)
     {
         $this->ctx = $ctx;
+        $this->logger = $ctx->getLogger();
     }
 
     /**
@@ -28,6 +27,7 @@ class Message_Client
      * @param \Zaly\Proto\Core\Message $message
      * @param int $roomType
      * @return bool
+     * @throws ZalyException
      */
     public function sendU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $message, $roomType = Zaly\Proto\Core\MessageRoomType::MessageRoomU2)
     {
@@ -38,7 +38,6 @@ class Message_Client
             case \Zaly\Proto\Core\MessageType::MessageNotice:
                 $notice = $message->getNotice();
                 $noticeBody = $notice->getBody();
-                //# TODO limit body length 2KB = 2048 Byte
                 $noticeBody = substr($noticeBody, 0, 2048);
                 $notice->setBody($noticeBody);
                 $result = $this->saveU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $notice, $roomType);
@@ -87,15 +86,80 @@ class Message_Client
                 $vedio = $message->getVideo();
                 $result = $this->saveU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $vedio, $roomType);
                 break;
+            case \Zaly\Proto\Core\MessageType::MessageRecall:
+                $recall = $message->getRecall();
+                $this->checkU2RecallPermission($fromUserId, $recall->getMsgId());
+                $result = $this->saveU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $recall, $roomType);
+                break;
             default:
                 $this->ctx->Wpf_Logger->error("u2-message", "unsupport message type");
                 break;
 
         }
 
-//        $this->tellClientNews(false, $toUserId);
-
         return $result;
+    }
+
+    private function checkU2RecallPermission($recallUserId, $recallMsgId)
+    {
+        $recallMessage = $this->ctx->SiteU2MessageTable->queryMessageByFromUserIdAndMsgId($recallUserId, $recallMsgId);
+
+        if (empty($recallMessage)) {
+            throw new ZalyException(ZalyError::ErrorMessageNotExist);
+        }
+
+        $msgTime = $recallMessage['msgTime'];
+        if (($this->getCurrentTimeMills() - $msgTime) > 2 * 60 * 1000) {
+            throw new ZalyException(ZalyError::ErrorMessageRecallOvertime);
+        }
+
+        $this->updateMessageTypeToInvalid(false, $recallMsgId);
+        return true;
+
+    }
+
+    private function checkGroupRecallMessage($recallGroupId, $recallUserId, $recallMsgId)
+    {
+        $recallMessage = $this->ctx->SiteGroupMessageTable->queryMessageByMsgId($recallGroupId, $recallMsgId);
+
+        if (empty($recallMessage)) {
+            throw new ZalyException(ZalyError::ErrorMessageNotExist);
+        }
+
+        $fromUserId = $recallMessage['fromUserId'];
+
+        if ($fromUserId == $recallUserId) {
+            //自己撤回自己的消息
+            $msgTime = $recallMessage['msgTime'];
+            if (($this->getCurrentTimeMills() - $msgTime) > 2 * 60 * 1000) {
+                throw new ZalyException(ZalyError::ErrorMessageRecallOvertime);
+            }
+        } else {
+            //管理员撤回
+            //check is group managers
+            $ownerType = \Zaly\Proto\Core\GroupMemberType::GroupMemberOwner;
+            $adminType = \Zaly\Proto\Core\GroupMemberType::GroupMemberAdmin;
+            $groupAdmin = $this->ctx->SiteGroupUserTable->getGroupAdmin($recallGroupId, $recallUserId, $adminType, $ownerType);
+
+            if (empty($groupAdmin)) {
+                throw new ZalyException(ZalyError::ErrorMessageRecallOvertime);
+            }
+        }
+
+        $this->updateMessageTypeToInvalid(true, $recallMsgId);
+        return true;
+    }
+
+    private function updateMessageTypeToInvalid($isGroup, $msgId)
+    {
+        $tag = __CLASS__ . '->' . __FUNCTION__;
+        try {
+            $invalidType = Zaly\Proto\Core\MessageType::MessageInvalid;
+            return $isGroup ? $this->ctx->SiteGroupMessageTable->updateMessageType($msgId, $invalidType)
+                : $this->ctx->SiteU2MessageTable->updateMessageType($msgId, $invalidType);
+        } catch (Exception $e) {
+            $this->logger->error($tag, $e);
+        }
     }
 
     /**
@@ -105,6 +169,7 @@ class Message_Client
      * @param int $msgType
      * @param \Zaly\Proto\Core\Message $message
      * @return bool
+     * @throws ZalyException
      */
     public function sendGroupMessage($msgId, $fromUserId, $groupId, $msgType, $message)
     {
@@ -114,7 +179,6 @@ class Message_Client
             case \Zaly\Proto\Core\MessageType::MessageNotice:
                 $notice = $message->getNotice();
                 $noticeBody = $notice->getBody();
-                //# TODO limit body length 2KB = 2048 Byte
                 $noticeBody = substr($noticeBody, 0, 2048);
                 $notice->setBody(trim($noticeBody));
                 $result = $this->saveGroupMessage($msgId, $fromUserId, $groupId, $msgType, $notice);
@@ -160,6 +224,11 @@ class Message_Client
             case \Zaly\Proto\Core\MessageType::MessageVideo:
                 $vedio = $message->getVideo();
                 $result = $this->saveGroupMessage($msgId, $fromUserId, $groupId, $msgType, $vedio);
+                break;
+            case \Zaly\Proto\Core\MessageType::MessageRecall:
+                $recall = $message->getRecall();
+                $this->checkGroupRecallMessage($groupId, $fromUserId, $recall->getMsgId());
+                $result = $this->saveGroupMessage($msgId, $fromUserId, $groupId, $msgType, $recall);
                 break;
             default:
                 $this->ctx->Wpf_Logger->error($tag, "do error group Message with unsupport msgType=" . $msgType);
@@ -284,9 +353,10 @@ class Message_Client
      * @param string $fromUserId , who send this message
      * @param $toUserId , if $userId!=$toUserId, means maybe user proxy send to self
      * @param $noticeText
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyU2NoticeMessage($userId, $fromUserId, $toUserId, $noticeText)
+    public function proxyU2NoticeMessage($userId, $fromUserId, $toUserId, $noticeText, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -304,8 +374,7 @@ class Message_Client
 
             $request = $this->sendU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $message);
 
-            $this->ctx->Message_News->tellClientNews(false, $toUserId);
-
+            $this->sendClientNews(false, $fromUserId, $toUserId, $tellFrom);
             return $request;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -320,9 +389,10 @@ class Message_Client
      * @param string $fromUserId
      * @param string $toUserId
      * @param string $text
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyU2TextMessage($userId, $fromUserId, $toUserId, $text)
+    public function proxyU2TextMessage($userId, $fromUserId, $toUserId, $text, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -340,7 +410,7 @@ class Message_Client
 
             $result = $this->sendU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $message);
 
-            $this->ctx->Message_News->tellClientNews(false, $toUserId);
+            $this->sendClientNews(false, $fromUserId, $toUserId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -357,9 +427,10 @@ class Message_Client
      * @param $url
      * @param $width
      * @param $height
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyU2ImageMessage($userId, $fromUserId, $toUserId, $url, $width, $height)
+    public function proxyU2ImageMessage($userId, $fromUserId, $toUserId, $url, $width, $height, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -378,7 +449,7 @@ class Message_Client
             $message->setTimeServer($this->getCurrentTimeMills());
 
             $result = $this->sendU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $message);
-            $this->ctx->Message_News->tellClientNews(false, $toUserId);
+            $this->sendClientNews(false, $fromUserId, $toUserId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -397,9 +468,10 @@ class Message_Client
      * @param $hrefUrl
      * @param $width
      * @param $height
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyU2WebMessage($userId, $fromUserId, $toUserId, $title, $code, $hrefUrl, $width, $height)
+    public function proxyU2WebMessage($userId, $fromUserId, $toUserId, $title, $code, $hrefUrl, $width, $height, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -425,7 +497,8 @@ class Message_Client
             $message->setTimeServer($this->getCurrentTimeMills());
 
             $result = $this->sendU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $message);
-            $this->ctx->Message_News->tellClientNews(false, $toUserId);
+
+            $this->sendClientNews(false, $fromUserId, $toUserId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -443,9 +516,10 @@ class Message_Client
      * @param $code
      * @param $hrefUrl
      * @param $height
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyU2WebNoticeMessage($userId, $fromUserId, $toUserId, $title, $code, $hrefUrl, $height)
+    public function proxyU2WebNoticeMessage($userId, $fromUserId, $toUserId, $title, $code, $hrefUrl, $height, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -458,7 +532,7 @@ class Message_Client
             }
 
             $webNotice->setCode($code);
-//            $webNotice->setHrefURL($hrefUrl);
+            $webNotice->setHrefURL($hrefUrl);
             $webNotice->setHeight($height);
 
             $message = new Zaly\Proto\Core\Message();
@@ -469,8 +543,7 @@ class Message_Client
 
             $result = $this->sendU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $message);
 
-            $this->ctx->Message_News->tellClientNews(false, $toUserId);
-
+            $this->sendClientNews(false, $fromUserId, $toUserId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -491,13 +564,10 @@ class Message_Client
             $message->setType($msgType);
             $message->setTimeServer($this->getCurrentTimeMills());
 
-//            $this->ctx->Wpf_Logger->info("friendApplyEvent =======>", "message=" . $message->serializeToString());
-
             $result = $this->sendU2Message($msgId, $userId, $fromUserId, $toUserId, $msgType, $message);
 
-//            $this->ctx->Wpf_Logger->info("friendApplyEvent =======>", "result=" . $result);
-
-            $this->ctx->Message_News->tellClientNews(false, $toUserId);
+//            $this->ctx->Message_News->tellClientNews(false, $toUserId);
+            $this->sendClientNews(false, $fromUserId, $toUserId, false);
 
             $fromNickName = $this->ctx->SiteUserTable->getUserNickName($fromUserId);
             $pushText = 'You have a friend apply';
@@ -523,9 +593,10 @@ class Message_Client
      * @param string $fromUserId
      * @param string $groupId
      * @param string $noticeText
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyGroupNoticeMessage($fromUserId, $groupId, $noticeText)
+    public function proxyGroupNoticeMessage($fromUserId, $groupId, $noticeText, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -544,7 +615,7 @@ class Message_Client
 
             $result = $this->sendGroupMessage($msgId, $fromUserId, $groupId, $msgType, $message);
 
-            $this->ctx->Message_News->tellClientNews(true, $groupId);
+            $this->sendClientNews(true, $fromUserId, $groupId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -559,9 +630,10 @@ class Message_Client
      * @param $fromUserId
      * @param $groupId
      * @param $noticeText
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyGroupAsU2NoticeMessage($userId, $fromUserId, $groupId, $noticeText)
+    public function proxyGroupAsU2NoticeMessage($userId, $fromUserId, $groupId, $noticeText, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -580,7 +652,8 @@ class Message_Client
             $roomType = Zaly\Proto\Core\MessageRoomType::MessageRoomGroup;
             $result = $this->sendU2Message($msgId, $userId, $fromUserId, $groupId, $msgType, $message, $roomType);
 
-            $this->ctx->Message_News->tellClientNews(true, $groupId);
+//            $this->ctx->Message_News->tellClientNews(true, $groupId);
+            $this->sendClientNews(false, $fromUserId, $userId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -595,11 +668,11 @@ class Message_Client
      * @param string $fromUserId
      * @param string $groupId
      * @param string $text
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyGroupTextMessage($fromUserId, $groupId, $text)
+    public function proxyGroupTextMessage($fromUserId, $groupId, $text, $tellFrom = false)
     {
-
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
             $msgType = Zaly\Proto\Core\MessageType::MessageText;
@@ -615,7 +688,8 @@ class Message_Client
             $message->setTimeServer($this->getCurrentTimeMills());
 
             $result = $this->sendGroupMessage($msgId, $fromUserId, $groupId, $msgType, $message);
-            $this->ctx->Message_News->tellClientNews(true, $groupId);
+
+            $this->sendClientNews(true, $fromUserId, $groupId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -631,9 +705,10 @@ class Message_Client
      * @param $url
      * @param $width
      * @param $height
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyGroupImageMessage($fromUserId, $groupId, $url, $width, $height)
+    public function proxyGroupImageMessage($fromUserId, $groupId, $url, $width, $height, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -652,7 +727,8 @@ class Message_Client
             $message->setTimeServer($this->getCurrentTimeMills());
 
             $result = $this->sendGroupMessage($msgId, $fromUserId, $groupId, $msgType, $message);
-            $this->ctx->Message_News->tellClientNews(true, $groupId);
+
+            $this->sendClientNews(true, $fromUserId, $groupId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -670,9 +746,10 @@ class Message_Client
      * @param $hrefUrl
      * @param $width
      * @param $height
+     * @param bool $tellFrom
      * @return bool
      */
-    public function proxyGroupWebMessage($fromUserId, $groupId, $title, $code, $hrefUrl, $width, $height)
+    public function proxyGroupWebMessage($fromUserId, $groupId, $title, $code, $hrefUrl, $width, $height, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -698,7 +775,8 @@ class Message_Client
             $message->setTimeServer($this->getCurrentTimeMills());
 
             $result = $this->sendGroupMessage($msgId, $fromUserId, $groupId, $msgType, $message);
-            $this->ctx->Message_News->tellClientNews(true, $groupId);
+
+            $this->sendClientNews(true, $fromUserId, $groupId, $tellFrom);
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -715,9 +793,10 @@ class Message_Client
      * @param $code
      * @param $hrefUrl
      * @param $height
+     * @param $tellFrom
      * @return bool
      */
-    public function proxyGroupWebNoticeMessage($fromUserId, $groupId, $title, $code, $hrefUrl, $height)
+    public function proxyGroupWebNoticeMessage($fromUserId, $groupId, $title, $code, $hrefUrl, $height, $tellFrom = false)
     {
         $tag = __CLASS__ . "->" . __FUNCTION__;
         try {
@@ -744,6 +823,8 @@ class Message_Client
             $result = $this->sendGroupMessage($msgId, $fromUserId, $groupId, $msgType, $message);
             $this->ctx->Message_News->tellClientNews(true, $groupId);
 
+            $this->sendClientNews(true, $fromUserId, $groupId, $tellFrom);
+
             return $result;
         } catch (Exception $e) {
             $this->ctx->Wpf_Logger->error($tag, $e);
@@ -751,4 +832,11 @@ class Message_Client
         return false;
     }
 
+    private function sendClientNews($isGroup, $from, $to, $tellFrom)
+    {
+        if ($tellFrom) {
+            $this->ctx->Message_News->tellClientNews(false, $from);
+        }
+        $this->ctx->Message_News->tellClientNews($isGroup, $to);
+    }
 }

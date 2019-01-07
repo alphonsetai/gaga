@@ -7,6 +7,7 @@
  *
  * @property File_Manager File_Manager
  * @property Site_Login Site_Login
+ * @property Site_SessionVerify Site_SessionVerify
  * @property SiteConfig SiteConfig
  * @property Site_Config Site_Config
  * @property Site_Custom Site_Custom
@@ -16,6 +17,8 @@
  * @property SiteSessionTable SiteSessionTable
  * @property SiteUserTable SiteUserTable
  * @property PassportPasswordTable PassportPasswordTable
+ * @property PassportPasswordLogTable PassportPasswordLogTable
+ * @property PassportPasswordCountLogTable PassportPasswordCountLogTable
  * @property PassportPasswordTokenTable PassportPasswordTokenTable
  * @property PassportPasswordPreSessionTable PassportPasswordPreSessionTable
  * @property SiteUserFriendTable SiteUserFriendTable
@@ -27,6 +30,9 @@
  * @property SiteUicTable SiteUicTable
  * @property SitePluginTable SitePluginTable
  * @property SiteLoginCustomTable SiteLoginCustomTable
+ * @property SiteCustomTable SiteCustomTable
+ * @property SiteThirdPartyLoginTable SiteThirdPartyLoginTable
+ * @property SiteUserCustomTable SiteUserCustomTable
  *
  * @property Message_Client Message_Client
  * @property Message_News Message_News
@@ -39,7 +45,22 @@
  * @property ZalyHelper ZalyHelper
  * @property SiteUserGifTable SiteUserGifTable
  *
+ * @property PassportCustomerServiceTable PassportCustomerServiceTable
+ * @property PassportCustomerServicePreSessionTable PassportCustomerServicePreSessionTable
+ * @property SiteCustomerServiceTable SiteCustomerServiceTable
+ * @property SiteCustomerServiceSettingTable SiteCustomerServiceSettingTable
+ *
  * @property Pinyin Pinyin
+ *
+ * @property DuckChat_Client DuckChat_Client
+ * @property DuckChat_Session DuckChat_Session
+ * @property DuckChat_Message DuckChat_Message
+ * @property DuckChat_User DuckChat_User
+ * @property DuckChat_Group DuckChat_Group
+ * @property Manual_User Manual_User
+ * @property Manual_Group Manual_Group
+ * @property Manual_Friend Manual_Friend
+ * @property Upgrade_Client Upgrade_Client
  *
  */
 class BaseCtx extends Wpf_Ctx
@@ -91,7 +112,7 @@ class BaseCtx extends Wpf_Ctx
 
                     $options = array(
                         PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-//                        PDO::ATTR_PERSISTENT => true,
+                        PDO::ATTR_PERSISTENT => true,
                     );
                     try {
                         $this->db = new \PDO($dbDsn, $dbUserName, $dbPwssword, $options);//创建一个pdo对象

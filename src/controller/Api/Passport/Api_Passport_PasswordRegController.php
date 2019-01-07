@@ -6,7 +6,7 @@
  * Time: 2:46 PM
  */
 
-class Api_Passport_PasswordRegController extends BaseController
+class Api_Passport_PasswordRegController extends Api_Passport_PasswordBase
 {
     private $classNameForRequest = '\Zaly\Proto\Site\ApiPassportPasswordRegRequest';
     private $classNameForResponse = '\Zaly\Proto\Site\ApiPassportPasswordRegResponse';
@@ -24,52 +24,50 @@ class Api_Passport_PasswordRegController extends BaseController
     {
         $tag = __CLASS__ . '-' . __FUNCTION__;
         try {
+            header('Access-Control-Allow-Origin: *');
             $loginName = $request->getLoginName();
-            $email     = $request->getEmail();
-            $password  = $request->getPassword();
-            $nickname  = $request->getNickname();
-            $sitePubkPem = $request->getSitePubkPem();
+            $email = $request->getEmail();
+            $password = $request->getPassword();
+            $sitePubkPem = $this->ctx->Site_Config->getConfigValue(SiteConfig::SITE_ID_PUBK_PEM);
+
             $invitationCode = $request->getInvitationCode();
 
+            $this->getCustomLoginConfig();
+
             $loginName = trim($loginName);
-            if(!$loginName || mb_strlen($loginName)>24 ) {
+            if (!$loginName || mb_strlen($loginName) > $this->loginNameMaxLength || mb_strlen($loginName) < $this->loginNameMinLength) {
                 $errorCode = $this->zalyError->errorLoginNameLength;
                 $errorInfo = $this->zalyError->getErrorInfo($errorCode);
-                $this->setRpcError($errorCode, $errorInfo);
-                throw new Exception("loginName  is  not exists");
+                throw new Exception($errorInfo);
             }
 
-            if(!$password) {
+            if (!$password || (strlen($password) > $this->pwdMaxLength) || (strlen($password) < $this->pwdMinLength)) {
                 $errorCode = $this->zalyError->errorPassowrdLength;
                 $errorInfo = $this->zalyError->getErrorInfo($errorCode);
-                $this->setRpcError($errorCode, $errorInfo);
-                throw new Exception("password  is  not exists");
+                throw new Exception($errorInfo);
             }
 
-            $nickname = trim($nickname);
-            if(!$nickname || mb_strlen($nickname) > 16) {
-                $errorCode = $this->zalyError->errorNicknameLength;
-                $errorInfo = $this->zalyError->getErrorInfo($errorCode);
-                $this->setRpcError($errorCode, $errorInfo);
-                throw new Exception("nickname  is  not exists");
+            $flag = ZalyHelper::verifyChars($password, $this->pwdContainCharacters);
+            if (!$flag) {
+                $errorInfo = ZalyText::getText("text.pwd.type", $this->language);
+                throw new Exception($errorInfo);
             }
 
-            if(!$sitePubkPem || strlen($sitePubkPem) < 0) {
+
+            $nickname = $request->getNickname();
+            if (empty($nickname)) {
+                $nickname = $loginName;
+            }
+
+            if (!$sitePubkPem || strlen($sitePubkPem) < 0) {
                 $errorCode = $this->zalyError->errorSitePubkPem;
                 $errorInfo = $this->zalyError->getErrorInfo($errorCode);
-                $this->setRpcError($errorCode, $errorInfo);
-                throw new Exception("sitePubkPem  is  not exists");
+                throw new Exception($errorInfo);
             }
 
-            $loginConfig = $this->ctx->Site_Custom->getLoginAllConfig();
-            $passwordResetRequiredConfig = isset($loginConfig[LoginConfig::PASSWORD_RESET_REQUIRED]) ? $loginConfig[LoginConfig::PASSWORD_RESET_REQUIRED] : "";
-            $passwordResetRequired = isset($passwordResetRequiredConfig["configValue"]) ? $passwordResetRequiredConfig["configValue"] : "";
-            $passwordResetWayConfig = isset($loginConfig[LoginConfig::PASSWORD_RESET_WAY]) ? $loginConfig[LoginConfig::PASSWORD_RESET_WAY] : "";
-            $passwordRestWay = isset($passwordResetWayConfig["configValue"]) ? $passwordResetWayConfig["configValue"] : "email ";
-
-            if($passwordResetRequired == 1 && mb_strlen(trim($email))<1) {
+            if ($this->passwordResetRequired == 1 && mb_strlen(trim($email)) < 1) {
                 $tip = ZalyText::getText("text.param.void", $this->language);
-                $errorInfo = $passwordRestWay." " .$tip;
+                $errorInfo = $this->passwordRestWay . " " . $tip;
                 $this->setRpcError("error.alert", $errorInfo);
                 throw new Exception("$errorInfo  is  not exists");
             }
@@ -81,7 +79,8 @@ class Api_Passport_PasswordRegController extends BaseController
             $this->setRpcError($this->defaultErrorCode, "");
             $this->rpcReturn($transportData->getAction(), $response);
         } catch (Exception $ex) {
-            $this->ctx->Wpf_Logger->error($tag, "error_msg=" . $ex->getMessage());
+            $this->ctx->Wpf_Logger->error($tag, "error_msg=" . $ex);
+            $this->setRpcError("error.alert", $ex->getMessage());
             $this->rpcReturn($transportData->getAction(), new $this->classNameForResponse());
         }
     }
@@ -89,45 +88,46 @@ class Api_Passport_PasswordRegController extends BaseController
     private function checkLoginName($loginName)
     {
         $user = $this->ctx->PassportPasswordTable->getUserByLoginName($loginName);
-        if($user){
+        if ($user) {
             $errorCode = $this->zalyError->errorExistLoginName;
             $errorInfo = $this->zalyError->getErrorInfo($errorCode);
-            $this->setRpcError($errorCode, $errorInfo);
-            throw new Exception("loginName is exists");
+            throw new Exception($errorInfo);
         }
     }
 
     private function registerUserForPassport($loginName, $email, $password, $nickname, $invitationCode, $sitePubkPem)
     {
-       try{
-           $this->ctx->BaseTable->db->beginTransaction();
-           $userId   = ZalyHelper::generateStrId();
-           $userInfo = [
-               "userId"    => $userId,
-               "loginName" => $loginName,
-               "email"     => $email,
-               "password"  => password_hash($password, PASSWORD_BCRYPT),
-               "nickname"  => $nickname,
-               "invitationCode" => $invitationCode,
-               "timeReg" => ZalyHelper::getMsectime()
-           ];
-           $this->ctx->PassportPasswordTable->insertUserInfo($userInfo);
-           $preSessionId = ZalyHelper::generateStrId();
+        try {
+            $tag = __CLASS__ . '-' . __FUNCTION__;
 
-           $preSessionInfo = [
-               "userId" => $userId,
-               "preSessionId" => $preSessionId,
-               "sitePubkPem" => base64_encode($sitePubkPem)
-           ];
-           $this->ctx->PassportPasswordPreSessionTable->insertPreSessionData($preSessionInfo);
+            $this->ctx->BaseTable->db->beginTransaction();
+            $userId = ZalyHelper::generateStrId();
+            $userInfo = [
+                "userId" => $userId,
+                "loginName" => $loginName,
+                "email" => $email,
+                "password" => password_hash($password, PASSWORD_BCRYPT),
+                "nickname" => $nickname,
+                "invitationCode" => $invitationCode,
+                "timeReg" => ZalyHelper::getMsectime()
+            ];
+            $this->ctx->PassportPasswordTable->insertUserInfo($userInfo);
+            $preSessionId = ZalyHelper::generateStrId();
 
-           $this->ctx->BaseTable->db->commit();
-           return $preSessionId;
-       }catch (Exception $ex) {
-           $this->ctx->BaseTable->db->rollback();
-       }
+            $preSessionInfo = [
+                "userId" => $userId,
+                "preSessionId" => $preSessionId,
+                "sitePubkPem" => base64_encode($sitePubkPem)
+            ];
+            $this->ctx->PassportPasswordPreSessionTable->insertPreSessionData($preSessionInfo);
+
+            $this->ctx->BaseTable->db->commit();
+            return $preSessionId;
+        } catch (Exception $ex) {
+            $this->ctx->Wpf_Logger->error($tag, "error_msg=" . $ex);
+            $this->ctx->BaseTable->db->rollback();
+            throw new Exception($ex);
+        }
     }
-
-
 
 }

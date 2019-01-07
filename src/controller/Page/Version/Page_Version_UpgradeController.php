@@ -21,25 +21,75 @@ class Page_Version_UpgradeController extends Page_VersionController
             if (!$this->checkUpgradePassword()) {
                 throw new Exception("error upgrade password");
             }
-            $currentVersionCode = $_POST["versionCode"];
-            if (empty($currentVersionCode)) {
-                $currentVersionCode = 10011;
+            $currentCode = $_POST["versionCode"];
+            if (empty($currentCode)) {
+                $currentCode = 10011;
             }
 
             $result = false;
 
-            if ($currentVersionCode <= 10011) {
+            if ($currentCode <= 10011) {
                 $this->versionCode = 10012;
                 $this->versionName = "1.0.12";
-
-                $result = $this->upgrade_10011_10012();
-            } elseif ($currentVersionCode == 10012) {
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10012) {
                 $this->versionCode = 10013;
                 $this->versionName = "1.0.13";
-                $result = $this->upgrade_10012_10013();
+                $this->checkoutPreviousUpgrade($currentCode, "1.0.12");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10013) {
+                $this->versionCode = 10014;
+                $this->versionName = "1.0.14";
+                $this->checkoutPreviousUpgrade($currentCode, "1.0.13");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode >= 10014 && $currentCode < 10100) {
+                $this->versionCode = 10100;
+                $this->versionName = "1.1.0";
+                $this->checkoutPreviousUpgrade($currentCode, "1.0.14");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10100) {
+                $this->versionCode = 10101;
+                $this->versionName = "1.1.1";
+                $this->checkoutPreviousUpgrade($currentCode, "1.1.1");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10101) {
+                $this->versionCode = 10102;
+                $this->versionName = "1.1.2";
+                $this->checkoutPreviousUpgrade($currentCode, "1.1.2");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10102) {
+                $this->versionCode = 10103;
+                $this->versionName = "1.1.3";
+                $this->checkoutPreviousUpgrade($currentCode, "1.1.3");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10103) {
+                $this->versionCode = 10104;
+                $this->versionName = "1.1.4";
+                $this->checkoutPreviousUpgrade($currentCode, "1.1.4");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10104) {
+                $this->versionCode = 10105;
+                $this->versionName = "1.1.5";
+                $this->checkoutPreviousUpgrade($currentCode, "1.1.5");
+                $result = Upgrade_Client::doUpgrade($currentCode, $this->versionCode);
+            } elseif ($currentCode == 10105) {
+                $this->versionCode = 10106;
+                $this->versionName = "1.1.6";
+                $this->checkoutPreviousUpgrade($currentCode, "1.1.6");
+                $result = true;
+            } elseif ($currentCode == 10106) {
+                $this->versionCode = 10107;
+                $this->versionName = "1.1.7";
+                $this->checkoutPreviousUpgrade($currentCode, $this->versionName);
+                $result = true;
+                // change upgrade password
+                $this->updatePassword();
+            } else {
+                throw new Exception("unsupport site version code = " . $currentCode);
+            }
 
-                //最新版本审计完成以后，删除升级文件
-                $this->deleteUpgradePasswordFile();
+            if ($result) {
+                $this->upgradeErrCode = "success";
             }
 
             //update cache if exists
@@ -66,13 +116,8 @@ class Page_Version_UpgradeController extends Page_VersionController
     {
         $upgradePassword = $_COOKIE['upgradePassword'];
 
-        $fileName = $this->getPasswordFileName();
-
-        $passwordFileName = dirname(__FILE__) . "/../../../" . $fileName;
-
-        $this->logger->error("page.version.upgrade", "fileName=" . $passwordFileName);
-
-        $serverPassword = file_get_contents($passwordFileName);
+        $serverPassword = $this->getUpgradePassword();
+        $serverPassword = trim($serverPassword);
 
         if ($upgradePassword != sha1($serverPassword)) {
             throw new Exception("upgrade gaga-server by error password");
@@ -81,270 +126,40 @@ class Page_Version_UpgradeController extends Page_VersionController
         return true;
     }
 
-    // upgrade from 1.0.11 to 1.0.12
-    private function upgrade_10011_10012()
+    private function checkoutPreviousUpgrade($currentCode, $currentVersionName)
     {
-        $dbType = $this->ctx->dbType;
-
-        if ($dbType == "mysql") {
-            $this->executeMysqlScript();
-            return $this->upgrade_10011_10012_mysql();
-        } else {
-            //sqlite
-            return $this->upgrade_10011_10012_sqlite();
-        }
-    }
-
-    private function upgrade_10012_10013()
-    {
-        $dbType = $this->ctx->dbType;
-        $this->upgradeSitePluginFor10013();
-        if ($dbType == "mysql") {
-            $this->executeMysqlScript();
-            return $this->upgrade_10012_10013_mysql();
-        } else {
-            return $this->upgrade_10012_10013_sqlite();
-        }
-    }
-
-    private function upgrade_10011_10012_mysql()
-    {
-        $tag = __CLASS__ . "->" . __FUNCTION__;
-        $sql = "alter table sitePlugin ADD COLUMN management TEXT;";
-
-        $prepare = $this->ctx->db->prepare($sql);
-
-        $flag = $prepare->execute();
-
-        $errCode = $prepare->errorCode();
-
-        if (($flag && $errCode == "00000") || "42S21" == $errCode) {
-            $this->upgradeErrCode = "success";
+        $upgradeResult = $this->getUpgradeVersion();
+        $versionCode = $upgradeResult["versionCode"];
+        $upgradeCode = $upgradeResult["upgradeErrCode"];
+        if ($currentCode <= $versionCode && "success" == $upgradeCode) {
+            $this->initUpgradeInfo($currentCode, $currentVersionName);
             return true;
         }
 
-        $this->upgradeErrCode = "error";
-        $this->upgradeErrInfo = var_export($prepare->errorInfo(), true);
-        $this->logger->error("page.version.upgrade", "upgrade result=" . var_export($prepare->errorInfo(), true));
-        return false;
-    }
+        $siteVersionCode = ZalyConfig::getConfig(ZalyConfig::$configSiteVersionCodeKey);
 
-    private function upgrade_10011_10012_sqlite()
-    {
-        $tag = __CLASS__ . "->" . __FUNCTION__;
+        if (!is_numeric($siteVersionCode)) {
+            $siteVersionCode = 10011;
+        }
 
-        $this->dropDBTable('sitePlugin_temp_10011');
+        $siteVersionCode = max($siteVersionCode, 10011);
 
-        $sql = "alter table sitePlugin rename to sitePlugin_temp_10011";
-        $result = $this->ctx->db->exec($sql);
-        $this->logger->error($tag, "rename table sitePlugin to sitePlugin_temp_10011 result=" . $result);
-
-        $this->executeSqliteScript();
-        $this->logger->error($tag, "upgrade sqlite,execute sqlite script");
-
-        //migrate data to new table
-        $insertSql = "insert into sitePlugin(id,pluginId,name,logo,sort,landingPageUrl,landingPageWithProxy,usageType,loadingType,permissionType,authKey,addTime) 
-          select id,pluginId,name,logo,sort,landingPageUrl,landingPageWithProxy,usageType,loadingType,permissionType,authKey,addTime from sitePlugin_temp_10011";
-
-        $prepare = $this->ctx->db->prepare($insertSql);
-        $flag = $prepare->execute();
-        $errCode = $prepare->errorCode();
-
-        if ($flag && $errCode == "00000") {
-            $this->upgradeErrCode = "success";
-            $this->dropDBTable('sitePlugin_temp_10011');
+        if ($currentCode <= $siteVersionCode) {
+            $this->initUpgradeInfo($currentCode, $currentVersionName);
             return true;
         }
 
-        $this->upgradeErrCode = "error";
-        $this->upgradeErrInfo = var_export($prepare->errorInfo(), true);
-        $this->logger->error("page.version.upgrade", "upgrade result=" . var_export($prepare->errorInfo(), true));
-        return false;
+        throw new Exception($currentCode . " upgrade error ,as last upgrade failed");
     }
 
-    private function upgrade_10012_10013_mysql()
+    private function initUpgradeInfo($versionCode, $versionName)
     {
-        $tag = __CLASS__ . "->" . __FUNCTION__;
-        //config add enableAddFriendInGroup = true;
-        $this->addEnableAddFriendInGroupConfig();
-
-
-        //add siteGroup canAddFriend column
-        $sql = "alter table siteGroup add column canAddFriend BOOLEAN default true";
-        $prepare = $this->ctx->db->prepare($sql);
-        $flag = $prepare->execute();
-
-        $dbErrCode = $prepare->errorCode();
-        $flag = (($flag && "00000" == $dbErrCode) || "42S21" == $dbErrCode);
-
-        $flag = $flag && $this->upgradePasswordTableFrom10012_10013("mysql");
-
-        if ($flag) {
-            $this->upgradeErrCode = "success";
-            return true;
-        }
-
-        $this->upgradeErrCode = "error";
-        $this->upgradeErrInfo = var_export($prepare->errorInfo(), true);
-        return false;
-    }
-
-    private function upgrade_10012_10013_sqlite()
-    {
-        $tag = __CLASS__ . "->" . __FUNCTION__;
-        //config add enableAddFriendInGroup = true;
-        $this->addEnableAddFriendInGroupConfig();
-
-        //upgrade siteGroup table
-        $flag = $this->upgradeSiteGroupTableFrom10012_10013();
-        //upgrade passportPassword table
-        $flag = $flag && $this->upgradePasswordTableFrom10012_10013("sqlite");
-
-        if ($flag) {
-            $this->upgradeErrCode = "success";
-            return true;
-        }
-
-        return false;
-    }
-
-    private function upgradeSiteGroupTableFrom10012_10013()
-    {
-        $tag = __CLASS__ . '->' . __FUNCTION__;
-
-        $this->dropDBTable("siteGroup_temp_10012");
-
-        //rename table
-        $sql = "alter table siteGroup rename to siteGroup_temp_10012";
-        $result = $this->ctx->db->exec($sql);
-        $this->logger->error($tag, "rename table siteGroup to siteGroup_temp_10012 result=" . $result);
-
-        //execute all table
-        $this->executeSqliteScript();
-
-        //migrate data to new table
-        $sql = "insert into 
-                  siteGroup(id,groupId,name,nameInLatin,owner,avatar,description,descriptionType,permissionJoin,canGuestReadMessage,canAddFriend,speakers,maxMembers,status,isWidget,timeCreate) 
-                select 
-                  id,groupId,name,nameInLatin,owner,avatar,description,descriptionType,permissionJoin,canGuestReadMessage,1 as canAddFriend,speakers,maxMembers,status,isWidget,timeCreate
-                from siteGroup_temp_10012";
-        $prepare = $this->ctx->db->prepare($sql);
-        $flag = $prepare->execute();
-
-        if ($flag && $prepare->errorCode() == "00000") {
-            $this->upgradeErrCode = "success";
-            $this->dropDBTable("siteGroup_temp_10012");
-            return true;
-        }
-
-        $this->upgradeErrCode = "error";
-        $this->upgradeErrInfo = var_export($prepare->errorInfo(), true);
-        return false;
-
-    }
-
-    private function upgradePasswordTableFrom10012_10013($dbType)
-    {
-        $tag = __CLASS__ . "->" . __FUNCTION__;
-
-        $this->dropDBTable('passportPassword_temp_10012');
-
-        //rename table
-        $sql = "alter table passportPassword rename to passportPassword_temp_10012";
-        $result = $this->ctx->db->exec($sql);
-        $this->logger->error($tag, "rename table passportPassword to passportPassword_temp_10012 result=" . $result);
-
-        if ("mysql" == $dbType) {
-            $this->executeMysqlScript();
-        } else {
-            //execute all table
-            $this->executeSqliteScript();
-        }
-
-
-        //migrate data to new table
-        $sql = "insert into 
-                  passportPassword(id ,userId ,loginName ,nickname ,password ,email ,invitationCode ,timeReg) 
-                select 
-                  id ,userId ,loginName ,nickname ,password,email ,invitationCode ,timeReg
-                from passportPassword_temp_10012";
-        $prepare = $this->ctx->db->prepare($sql);
-        $flag = $prepare->execute();
-
-        if ($flag && $prepare->errorCode() == "00000") {
-            $this->upgradeErrCode = "success";
-            $this->dropDBTable('passportPassword_temp_10012');
-            return true;
-        }
-
-        $this->upgradeErrCode = "error";
-        $this->upgradeErrInfo = var_export($prepare->errorInfo(), true);
-        return false;
-    }
-
-    private function upgradeSitePluginFor10013()
-    {
-        $tag = __CLASS__ . "->" . __FUNCTION__;
-
-        $data = [
-            'pluginId' => 105,
-            'name' => "账户密码管理",
-            'logo' => "",
-            'sort' => 105,
-            'landingPageUrl' => "index.php?action=miniProgram.passport.account",
-            'landingPageWithProxy' => 1,
-            'usageType' => Zaly\Proto\Core\PluginUsageType::PluginUsageAccountSafe,
-            'loadingType' => Zaly\Proto\Core\PluginLoadingType::PluginLoadingNewPage,
-            'permissionType' => Zaly\Proto\Core\PluginPermissionType::PluginPermissionAll,
-            'authKey' => "",
-            'management' => "",
+        $initInfo = [
+//            "versionCode" => $versionCode,
+//            "versionName" => $versionName,
+            "upgradeErrCode" => "",
+            "upgradeErrInfo" => "",
         ];
-
-        try {
-            $where = [
-                "pluginId" => 105,
-            ];
-            $this->ctx->SitePluginTable->updateProfile($data, $where);
-        } catch (Exception $e) {
-            $this->logger->error($tag, "ignore insert 105:" . $e->getMessage());
-        }
-
-
-        try {
-            $data["pluginId"] = 105;
-            $this->ctx->SitePluginTable->insertMiniProgram($data);
-        } catch (Exception $e) {
-            $this->logger->error($tag, "ignore update 105:" . $e->getMessage());
-        }
-
-        //update miniProgram management
-        try {
-            $data2 = [
-                'management' => "index.php?action=miniProgram.admin.passwordLogin",
-            ];
-            $where2 = [
-                "pluginId" => 102,
-            ];
-            $this->ctx->SitePluginTable->updateProfile($data2, $where2);
-        } catch (Exception $e) {
-            $this->logger->error($tag, "update 102 :" . $e->getMessage());
-        }
+        $this->updateUpgradeInfo($initInfo);
     }
-
-    private function addEnableAddFriendInGroupConfig()
-    {
-        $tag = __CLASS__ . "->" . __FUNCTION__;
-
-        $sql = "insert into siteConfig(configKey,configValue) values('enableAddFriendInGroup',1)";
-        $prepare = $this->ctx->db->prepare($sql);
-
-        $flag = $prepare->execute();
-
-        if (($flag && $prepare->errorCode() == "00000") || $prepare->errorCode() == "23000") {
-            return true;
-        }
-
-        throw new Exception(var_export($prepare->errorInfo(), true));
-    }
-
 }
